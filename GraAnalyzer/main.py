@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 list = ['E->TP',
         'P->XP',
         'P->ε',
@@ -12,10 +13,11 @@ list = ['E->TP',
         'F->n'
         ]
 
-sentence = '(n)*n'
+sentence = '(n*n)+(n/(n-n)'  # 假设前提在词法分析之后,所有无符号数已经被分析为代号n
 
 
 class production:
+
     def __init__(self, non_terminal, candidate):
         self.non_terminal = non_terminal
         self.candidate = candidate
@@ -25,6 +27,7 @@ class production:
 
 
 class Analyzer:
+
     def __init__(self, stList):
         self.grammar = [production(statement[0], statement[3:])
                         for statement in stList]
@@ -33,20 +36,25 @@ class Analyzer:
         self.Vn = set()
         self.FIRST = {}
         self.FOLLOW = {}
+        self.table = {}
+        self.process = False
         self.__generateVtVn()
         self.__generateFIRST()
         self.__generateFOLLOW()
-        # self.FIRST['+E'] = self.__FIRST('+E')
         self.__generateTable()
 
-    def print(self):
-        # print([(st.non_terminal, st.candidate) for st in self.grammar])
-        print('Vt', self.Vt)
-        print('Vn', self.Vn)
-        print('FIRST', self.FIRST)
-        # print('FOLLOW', self.FOLLOW)
-        # print(self.grammar)
-        # print(self.table)
+    def printSelf(self):
+        print('sentence: ', sentence)
+        print('Vt: ', self.Vt)
+        print('Vn: ', self.Vn)
+        print('FIRST: ')
+        for key, value in self.FIRST.items():
+            print(key, value)
+        print('FOLLOW: ')
+        for key, value in self.FOLLOW.items():
+            print(key, value)
+        self.printTable()
+        self.printResult()
         pass
 
     def __generateVtVn(self):
@@ -62,7 +70,7 @@ class Analyzer:
             if N not in self.FIRST.keys():
                 self.FIRST[N] = self.__FIRST(N)
 
-    def __FIRST(self, beta):  # 有问题(对于句子)
+    def __FIRST(self, beta):
         setF = set()
         for symbol in beta:
             if symbol in self.Vt:
@@ -84,13 +92,14 @@ class Analyzer:
 
                         else:
                             if candidate[i] not in self.FIRST.keys():
-                                self.FIRST[candidate[i]] = self.__FIRST(candidate[i])
+                                self.FIRST[candidate[i]] = self.__FIRST(
+                                    candidate[i])
 
                             setS.update(self.FIRST[candidate[i]] - set('ε'))
 
                             if 'ε' not in self.FIRST[candidate[i]]:
                                 break
-            setF.update(setS-set('ε'))
+            setF.update(setS - set('ε'))
             if 'ε' not in setS:
                 return setF
         setF.add('ε')
@@ -124,7 +133,8 @@ class Analyzer:
                 if flag is True:  # 读到了该生成式的最后一个符号,而且全为'ε',就要找上一层的FOLLOW
                     if statement.non_terminal != non_t:
                         if statement.non_terminal not in self.FOLLOW.keys():
-                            self.FOLLOW[statement.non_terminal] = self.__FOLLOW(statement.non_terminal)
+                            self.FOLLOW[statement.non_terminal] = self.__FOLLOW(
+                                statement.non_terminal)
 
                         setF.update(self.FOLLOW[statement.non_terminal])
 
@@ -135,8 +145,8 @@ class Analyzer:
         table = {}
         for n in self.Vn:
             table[n] = {}
-            for t in self.Vt:
-                table[n][t] = 0
+            for t in self.Vt | {'$'}:
+                table[n][t] = '-'
 
         for statement in self.grammar:
             for terminal in self.__FIRST(statement.candidate):
@@ -148,32 +158,58 @@ class Analyzer:
         self.table = table
 
     def analyze(self, sentence):
-        induction = []
+        process = []
         sentence += '$'
         stack = ['$', 'E']
         ip = 0
         while True:
-            X = stack.pop()
+            X = stack[-1]
             a = sentence[ip]
             if X in self.Vt or X == '$':
                 if X == a:
+                    process.append([''.join(stack), sentence[ip:], '-'])
                     ip += 1
+                    X = stack.pop()
                 else:
-                    return False
+                    self.process = False
+                    return
             else:
-                if self.table[X][a] == 0:
-                    return False
+                if self.table[X][a] == '-':
+                    self.process = False
+                    return
                 rcandidate = self.table[X][a].candidate[::-1]
+                process.append(
+                    [''.join(stack), sentence[ip:], self.table[X][a]])
+                X = stack.pop()
                 for i in rcandidate:
                     if i != 'ε':
                         stack.append(i)
-                induction.append(self.table[X][a])
             if X == '$':
                 break
-        return induction
+        self.process = process
 
+    def printTable(self):
+        values = sorted(self.table['E'].keys())
+        print("%-8s" % "table", end='')
+        for terminal in values:
+            print("%-8s" % terminal, end='')
+        print('')
+        for key, value in self.table.items():
+            print("%-8s" % key, end='')
+            for non_t in sorted(value.keys()):
+                print("%-8s" % value[non_t], end='')
+            print('')
+
+    def printResult(self):
+
+        if self.process is False:
+            print("this sentence is not acceptable")
+        else:
+            print("\nprocess table")
+            print("%-20s%-20s%-20s" % ("stack", "input", "output"))
+            for step in self.process:
+                print("%-20s%-20s%-20s" % (step[0], step[1], step[2]))
 
 A = Analyzer(list)
-print(A.analyze(sentence))
-
-A.print()
+A.analyze(sentence)
+A.printSelf()
